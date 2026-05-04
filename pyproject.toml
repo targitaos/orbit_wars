@@ -1,0 +1,32 @@
+[project]
+name = "orbit-wars"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "pandas>=3.0.1",
+    "scikit-learn>=1.8.0",
+    "matplotlib>=3.8.0",
+    "kagglehub>=1.0.1",
+    "kaggle-environments>=1.28.0",
+    "ipython>=9.13.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+# select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM"]
+select = ["ALL"]
+ignore = ["E501",
+         "Q000", # single quote
+          "T201", # print statements found
+          "ERA001", #commented-out-code, only relevant for procuction code
+          ]
+
+[tool.ruff.format]
+quote-style = "single"
+ 
+indent-style = "space"

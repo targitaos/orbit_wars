@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 
 import kagglehub
+import numpy as np
 from kaggle_environments import make
 from kaggle_environments.envs.orbit_wars.orbit_wars import Fleet, Planet
 
@@ -22,6 +23,7 @@ def nearest_planet_sniper(obs: dict) -> list:
 
     for mine in my_planets:
         # Find the nearest planet we don't own
+        print(f'--- MY PLANET: ({mine.x:.2f}, {mine.y:.2f}), ships: {mine.ships}  ---')
         nearest = None
         min_dist = float('inf')
         for t in targets:
@@ -41,45 +43,16 @@ def nearest_planet_sniper(obs: dict) -> list:
             # Calculate angle from our planet to the target
             angle = math.atan2(nearest.y - mine.y, nearest.x - mine.x)
             moves.append([mine.id, angle, ships_needed])
+            print(f'Player {player}: Sending fleet from {mine.id} to {nearest.id}')
+            print(f'  Ships: {ships_needed}, Angle: {(angle / np.pi):.2f}π')
+            print(
+                f'  Mine pos: ({mine.x:.2f}, {mine.y:.2f}), Target pos: ({nearest.x:.2f}, {nearest.y:.2f})'
+            )
 
     return moves
 
 
 if __name__ == '__main__':
-    # kagglehub.login(api_token=os.environ['KAGGLE_API_TOKEN'])
-
-    # Download latest version
-    # path = kagglehub.competition_download('orbit-wars')
-
-    # print('Path to competition files:', path)
-
-    # env = make('orbit_wars', debug=True)
-    # print('----------------------')
-    # print(f'Environment: {env.name} v{env.version}')
-    # print('----------------------')
-    # print(f'Players: {env.specification.agents}')
-    # print('----------------------')
-    # print(f'Max steps: {env.configuration.episodeSteps}')
-
-    # Run a quick game to see what the observation looks like
-    # env = make('orbit_wars', debug=True)
-    # env.run(['random', 'random'])
-
-    # # Peek at the initial observation
-
-    # obs = env.steps[1][0].observation  # step 1 = first action step
-    # planets = [Planet(*p) for p in obs.planets]
-
-    # print(f'Player: {obs.player}')
-    # print(f'Angular velocity: {obs.angular_velocity:.4f} rad/turn')
-    # print(f'\nPlanets ({len(planets)}):')
-
-    # for p in planets[:6]:
-    #     owner_str = f'Player {p.owner}' if p.owner >= 0 else 'Neutral'
-    #     print(
-    #         f'  id={p.id} owner={owner_str:10s} pos=({p.x:.1f}, {p.y:.1f}) r={p.radius:.1f} ships={p.ships} prod={p.production}'
-    #     )
-
     # Test it against the random agent
     env = make('orbit_wars', debug=True)
     env.run([nearest_planet_sniper, 'random'])

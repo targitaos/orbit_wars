@@ -12,6 +12,7 @@ SOLAR_X = 50
 SOLAR_Y = 50
 ORBIT_RADIUS = 50
 MAX_SPEED = 6.0
+COMET_MARKER = -99
 
 
 def trajectory_calculation(
@@ -29,18 +30,20 @@ def trajectory_calculation(
     sender_radius = sender.radius  # physical radius of planet object
 
     rp = math.sqrt((solar_x - target.x) ** 2 + (solar_y - target.y) ** 2)  # orbital radius
-    # theta_p = math.acos((solar_x - target.x) / rp)  # initial angle of orbiting object
     theta_p = math.atan2(target.y - solar_y, target.x - solar_x)  # initial angle of orbiting object
-    rs = math.sqrt(
-        (sender.x - solar_x + sender_radius * np.cos(theta_p)) ** 2
-        + (sender.y - solar_y + sender_radius * np.sin(theta_p)) ** 2,
-    )  # starting radius from sun for linear object
-    # FIXME:
-    theta_s = math.atan2(sender.y - solar_y, sender.x - solar_x)
 
-    omega = (
-        angular_speed if rp + target_radius < ORBIT_RADIUS else 0
-    )  # angular speed of orbiting object (rad/s)
+    # rs = math.sqrt(
+    #     (sender.x - solar_x + sender_radius * np.cos(theta_p)) ** 2
+    #     + (sender.y - solar_y + sender_radius * np.sin(theta_p)) ** 2,
+    # )  # starting radius from sun for linear object
+    # theta_s = math.atan2(sender.y - solar_y, sender.x - solar_x)
+
+    dx, dy = sender.x - solar_x, sender.y - solar_y
+    rs = math.hypot(dx, dy)
+    theta_s = math.atan2(dy, dx)
+
+    omega_p = angular_speed if rp + target_radius < ORBIT_RADIUS else 0
+    omega_s = angular_speed if rs + sender_radius < ORBIT_RADIUS else 0
 
     def fleet_speed(ships: int, max_speed: float = MAX_SPEED) -> float:
         return 1.0 + (max_speed - 1.0) * (np.log(ships) / np.log(1000)) ** 1.5
@@ -49,10 +52,12 @@ def trajectory_calculation(
     # fleet_startpos = np.array([sender.x, sender.y])  # starting position of linear object
 
     def f(t):
-        return (v * t) ** 2 - (rp**2 + rs**2 - 2 * rp * rs * np.cos(omega * t + theta_p - theta_s))
+        return (v * t) ** 2 - (
+            rp**2 + rs**2 - 2 * rp * rs * np.cos((omega_p) * t + theta_p - theta_s)
+        )
 
     # Find a bracket where f changes sign
-    t_grid = np.linspace(1e-6, t_max, 20)
+    t_grid = np.linspace(1e-6, t_max, 10_000)
     signs = np.sign(f(t_grid))
     idx = np.where(np.diff(signs))[0]
     if len(idx) == 0:
@@ -63,8 +68,8 @@ def trajectory_calculation(
     t_sol = brentq(f, t_grid[idx[0]], t_grid[idx[0] + 1])
 
     # Recover theta_i from the original equations
-    dx = rp * np.cos(omega * t_sol + theta_p) - rs * np.cos(theta_s)
-    dy = rp * np.sin(omega * t_sol + theta_p) - rs * np.sin(theta_s)
+    dx = rp * np.cos(omega_p * t_sol + theta_p) - rs * np.cos(theta_s)
+    dy = rp * np.sin(omega_p * t_sol + theta_p) - rs * np.sin(theta_s)
     theta_i = np.arctan2(dy, dx)
     # theta_i = 3.087482441904048 # hardcoded for testing
     return theta_i, t_sol
@@ -79,10 +84,15 @@ def first_agent(obs: dict) -> list:
 
     # Separate our planets from targets
     my_planets = [p for p in planets if p.owner == player]
-    targets_all = [p for p in planets if p.owner != player]
+    targets_comets = [
+        p
+        for p, ip in zip(planets, obs.initial_planets, strict=True)
+        if ip[2] == COMET_MARKER and ip[3] == COMET_MARKER
+    ]
+    comet_set = set(targets_comets)
+    targets_all = [p for p in planets if p.owner != player and p not in comet_set]
     # targets_opponent = [p for p in planets if p.owner not in {-1, player}]
     # targets_neutral = [p for p in planets if p.owner == -1]
-
     if not targets_all:
         return moves  # issue; assumes no danger from inflight fleets
 
@@ -137,7 +147,7 @@ def first_agent(obs: dict) -> list:
 if __name__ == '__main__':
     # Test it against the random agent
     env = make('orbit_wars', debug=True)
-    env.run([first_agent, 'random'])
+    env.run([first_agent, 'random', 'random', 'random'])
 
     final = env.steps[-1]
     for i, s in enumerate(final):

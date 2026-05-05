@@ -4,7 +4,8 @@ from pathlib import Path
 
 # import kagglehub
 import numpy as np
-from kaggle_environments import make
+
+# from kaggle_environments import make
 from kaggle_environments.envs.orbit_wars.orbit_wars import Fleet, Planet
 from scipy.optimize import brentq
 
@@ -20,11 +21,10 @@ def trajectory_calculation(
     ships_needed: int,
     angular_speed: float,
 ) -> tuple[float, float]:
-    solar_x = 50
-    solar_y = 50
-    # phi0 = (np.pi - 1) / 2  # initial angle of orbiting object
+    solar_x = SOLAR_X
+    solar_y = SOLAR_Y
     r = math.sqrt((solar_x - target.x) ** 2 + (solar_y - target.y) ** 2)  # orbital radius
-    phi0 = math.acos((target.x - solar_x) / r)  # initial angle of orbiting object
+    phi0 = math.acos((solar_x - target.x) / r)  # initial angle of orbiting object
     target_radius = target.radius  # physical radius of orbiting object
 
     omega = (
@@ -35,7 +35,7 @@ def trajectory_calculation(
         return 1.0 + (max_speed - 1.0) * (np.log(ships) / np.log(1000)) ** 1.5
 
     def fleet_pos(t: float) -> np.ndarray:
-        return r * np.array([np.cos(omega * t + phi0), np.sin(omega * t + phi0)])
+        return r * np.array([np.cos(omega * t + phi0), np.sin(-omega * t + phi0)])
 
     def fleet_travel_distance(t: float) -> float:
         return np.linalg.norm(fleet_pos(t) - fleet_startpos)
@@ -53,7 +53,7 @@ def trajectory_calculation(
     fleet_startpos = np.array([mine.x, mine.y])  # starting position of linear object
 
     # --- Find first valid collision time ---
-    t_vals = np.linspace(0.01, 50, 50_000)
+    t_vals = np.linspace(1, 50, 50)
     g = np.array([abs(cos_arg(t)) - 1 for t in t_vals])
 
     t_star = None
@@ -63,14 +63,15 @@ def trajectory_calculation(
             break
 
     if t_star is None:
-        print('No collision possible with these parameters')
+        print('No intercept possible with these parameters')
         return None, None
     c = np.clip(cos_arg(t_star), -1, 1)
     # Two solutions: leading (+) and trailing (-) intercept
     alpha_lead = phi(t_star) + np.arccos(c)
     alpha_trail = phi(t_star) - np.arccos(c)
-
-    return alpha_lead, t_star
+    print(alpha_lead / np.pi + np.pi, alpha_trail / np.pi + np.pi)
+    return alpha_trail, t_star
+    # return alpha_lead, t_star
     # print(f'Collision time : {t_star:.4f} s')
     # print(np.cos(alpha_lead), np.sin(alpha_lead), np.cos(alpha_trail), np.sin(alpha_trail))
     # print(f'Leading  angle : {np.degrees(alpha_lead):.2f}°')
@@ -107,7 +108,7 @@ def first_agent(obs: dict) -> list:
 
         # How many ships do we need? Target's garrison + 1
         nearest = planets[12]  # TODO: Remove hardcoded target
-        ships_needed = max(nearest.ships + 1, 20)
+        ships_needed = max(nearest.ships + 1, 15)
         # ships_needed = nearest.ships + 1
 
         # Only send if we have enough
@@ -142,13 +143,35 @@ def first_agent(obs: dict) -> list:
 
 if __name__ == '__main__':
     # Test it against the random agent
-    env = make('orbit_wars', debug=True)
-    env.run([first_agent, 'random'])
+    # env = make('orbit_wars', debug=True)
+    # env.run([first_agent, 'random'])
 
-    final = env.steps[-1]
-    for i, s in enumerate(final):
-        print(f'Player {i}: reward={s.reward}, status={s.status}')
+    # final = env.steps[-1]
+    # for i, s in enumerate(final):
+    #     print(f'Player {i}: reward={s.reward}, status={s.status}')
 
-    html = env.render(mode='html', width=800, height=600)
-    with Path.open('replay.html', 'w') as f:
-        f.write(html)
+    # html = env.render(mode='html', width=800, height=600)
+    # with Path.open('replay.html', 'w') as f:
+    #     f.write(html)
+
+    import matplotlib.pyplot as plt
+
+    t = np.linspace(0, 50, 500)
+    rp = 75
+    rs = 81
+    omega = 0.25
+    theta_p0 = np.pi / 4
+    theta_s = np.pi / 3
+    v = 4
+    xp = rp * np.cos(omega * t + theta_p0)
+
+    plt.figure(figsize=(6, 6))
+    plt.plot(t, xp)
+    for theta_i in [0.1, 0.5, 1.0]:
+        xs = rs * np.cos(theta_s) + v * t * np.cos(theta_i) * t
+        plt.plot(t, xs, label=f'theta_i={theta_i:.1f}')
+    # xs = rs * np.cos(theta_s) + v * t * np.cos(theta_i) * t
+    plt.xlim(0, 5)
+    plt.ylim(-100, 100)
+    plt.legend()
+    plt.show()

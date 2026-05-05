@@ -15,7 +15,7 @@ MAX_SPEED = 6.0
 
 
 def trajectory_calculation(
-    mine: Planet,
+    sender: Planet,
     target: Planet,
     ships_needed: int,
     angular_speed: float,
@@ -26,18 +26,17 @@ def trajectory_calculation(
     solar_y = SOLAR_Y
 
     target_radius = target.radius  # physical radius of orbiting object
-    sender_radius = mine.radius  # physical radius of planet object
+    sender_radius = sender.radius  # physical radius of planet object
 
     rp = math.sqrt((solar_x - target.x) ** 2 + (solar_y - target.y) ** 2)  # orbital radius
-    theta_p = math.acos((solar_x - target.x) / rp)  # initial angle of orbiting object
-
+    # theta_p = math.acos((solar_x - target.x) / rp)  # initial angle of orbiting object
+    theta_p = math.atan2(target.y - solar_y, target.x - solar_x)  # initial angle of orbiting object
     rs = math.sqrt(
-        (mine.x - solar_x + sender_radius * np.cos(theta_p)) ** 2
-        + (mine.y - solar_y + sender_radius * np.sin(theta_p)) ** 2,
+        (sender.x - solar_x + sender_radius * np.cos(theta_p)) ** 2
+        + (sender.y - solar_y + sender_radius * np.sin(theta_p)) ** 2,
     )  # starting radius from sun for linear object
     # FIXME:
-    theta_s = math.atan2(target.y - solar_y, target.x - solar_x)
-    theta_p
+    theta_s = math.atan2(sender.y - solar_y, sender.x - solar_x)
 
     omega = (
         angular_speed if rp + target_radius < ORBIT_RADIUS else 0
@@ -47,13 +46,13 @@ def trajectory_calculation(
         return 1.0 + (max_speed - 1.0) * (np.log(ships) / np.log(1000)) ** 1.5
 
     v = fleet_speed(ships_needed)  # speed of linear object
-    # fleet_startpos = np.array([mine.x, mine.y])  # starting position of linear object
+    # fleet_startpos = np.array([sender.x, sender.y])  # starting position of linear object
 
     def f(t):
         return (v * t) ** 2 - (rp**2 + rs**2 - 2 * rp * rs * np.cos(omega * t + theta_p - theta_s))
 
     # Find a bracket where f changes sign
-    t_grid = np.linspace(1e-6, t_max, 10000)
+    t_grid = np.linspace(1e-6, t_max, 20)
     signs = np.sign(f(t_grid))
     idx = np.where(np.diff(signs))[0]
     if len(idx) == 0:
@@ -67,16 +66,12 @@ def trajectory_calculation(
     dx = rp * np.cos(omega * t_sol + theta_p) - rs * np.cos(theta_s)
     dy = rp * np.sin(omega * t_sol + theta_p) - rs * np.sin(theta_s)
     theta_i = np.arctan2(dy, dx)
-
+    # theta_i = 3.087482441904048 # hardcoded for testing
     return theta_i, t_sol
-    # return alpha_lead, t_star
-    # print(f'Collision time : {t_star:.4f} s')
-    # print(np.cos(alpha_lead), np.sin(alpha_lead), np.cos(alpha_trail), np.sin(alpha_trail))
-    # print(f'Leading  angle : {np.degrees(alpha_lead):.2f}°')
-    # print(f'Trailing angle : {np.degrees(alpha_trail):.2f}°')
 
 
 def first_agent(obs: dict) -> list:
+    print(f'--- NEW STEP: {obs.step} ---')
     moves = []
     player = obs.get('player', 0) if isinstance(obs, dict) else obs.player
     raw_planets = obs.get('planets', []) if isinstance(obs, dict) else obs.planets
@@ -91,12 +86,13 @@ def first_agent(obs: dict) -> list:
     if not targets_all:
         return moves  # issue; assumes no danger from inflight fleets
 
-    for mine in my_planets:
+    for sender in my_planets:
         # Find the nearest planet we don't own
+
         nearest = None
         min_dist = float('inf')
         for t in targets_all:
-            dist = math.sqrt((mine.x - t.x) ** 2 + (mine.y - t.y) ** 2)
+            dist = math.sqrt((sender.x - t.x) ** 2 + (sender.y - t.y) ** 2)
             if dist < min_dist:
                 min_dist = dist
                 nearest = t
@@ -110,11 +106,11 @@ def first_agent(obs: dict) -> list:
         # ships_needed = nearest.ships + 1
 
         # Only send if we have enough
-        if mine.ships >= ships_needed:
+        if sender.ships >= ships_needed:
             # Calculate angle from our planet to the target
-            # angle = math.atan2(nearest.y - mine.y, nearest.x - mine.x)
+            # angle = math.atan2(nearest.y - sender.y, nearest.x - sender.x)
             angle, delta_t = trajectory_calculation(
-                mine,
+                sender,
                 nearest,
                 ships_needed,
                 angular_speed=obs.angular_velocity,
@@ -122,14 +118,16 @@ def first_agent(obs: dict) -> list:
             )
             # if nearest.x**2 + nearest.y**2 < ORBIT_RADIUS**2:
             # print('Target is MOVING')
+            # if obs.step == 36:
+            #     angle = 3.087482441904048  # hardcoded for testing
             if angle is None:
                 continue  # no valid trajectory
-            moves.append([mine.id, angle, ships_needed])
-            print(f'Player {player}: Sending fleet from {mine.id} to {nearest.id}')
+            moves.append([sender.id, angle, ships_needed])
+            print(f'Player {player}: Sending fleet from {sender.id} to {nearest.id}')
             print(f'  Ships: {ships_needed}, against target with {nearest.ships} ships')
             print(f'  Angle: {(angle / np.pi):.2f}π, ETA: {delta_t:.2f} steps')
             print(
-                f'  Mine pos: ({mine.x:.2f}, {mine.y:.2f}), Target pos: ({nearest.x:.2f}, {nearest.y:.2f})',
+                f'  Sender pos: ({sender.x:.2f}, {sender.y:.2f}), Target pos: ({nearest.x:.2f}, {nearest.y:.2f})',
             )
             print('---------------------------------')
 

@@ -33,7 +33,7 @@ Order of planets to command
 Weighting of target planets
 
 # Open questions:
-Does planet speed impact velocity of fleet? Assumption asof 4/5: NO
+Does planet speed impact velocity of fleet? Assumption asof 4/5: NO, asnwer 5/5: No
 Can I see ships enroute?
 
 # Agent ideas

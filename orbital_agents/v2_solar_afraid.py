@@ -8,7 +8,7 @@ from kaggle_environments import make
 from kaggle_environments.envs.orbit_wars.orbit_wars import Fleet, Planet
 from scipy.optimize import brentq
 
-from orbital_agents.first import first_agent
+from orbital_agents.v1_first import first_agent
 
 SOLAR_X = 50
 SOLAR_Y = 50

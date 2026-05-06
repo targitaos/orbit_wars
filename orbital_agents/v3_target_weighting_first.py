@@ -14,8 +14,8 @@ from orbital_agents.agent_methods import (
     trajectory_calculation,
     trajectory_crosses_sun,
 )
-from orbital_agents.first import first_agent
-from orbital_agents.solar_afraid import solar_afraid
+from orbital_agents.v1_first import first_agent
+from orbital_agents.v2_solar_afraid import solar_afraid
 
 SOLAR_X = 50
 SOLAR_Y = 50

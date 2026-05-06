@@ -8,8 +8,11 @@ from kaggle_environments import make
 from kaggle_environments.envs.orbit_wars.orbit_wars import Fleet, Planet
 from scipy.optimize import brentq
 
+from orbital_agents.first import first_agent
+
 SOLAR_X = 50
 SOLAR_Y = 50
+SOLAR_RADIUS = 10
 ORBIT_RADIUS = 50
 MAX_SPEED = 6.0
 COMET_MARKER = -99
@@ -18,7 +21,8 @@ COMET_MARKER = -99
 def trajectory_calculation(
     sender: Planet,
     target: Planet,
-    ships_needed: int,
+    # ships_needed: int,
+    v: float,  # fleet speed
     angular_speed: float,
     t_max: float = 100.0,
 ) -> tuple[float, float]:
@@ -43,12 +47,7 @@ def trajectory_calculation(
     theta_s = math.atan2(dy, dx)
 
     omega_p = angular_speed if rp + target_radius < ORBIT_RADIUS else 0
-    omega_s = angular_speed if rs + sender_radius < ORBIT_RADIUS else 0
 
-    def fleet_speed(ships: int, max_speed: float = MAX_SPEED) -> float:
-        return 1.0 + (max_speed - 1.0) * (np.log(ships) / np.log(1000)) ** 1.5
-
-    v = fleet_speed(ships_needed)  # speed of linear object
     # fleet_startpos = np.array([sender.x, sender.y])  # starting position of linear object
 
     def f(t):
@@ -75,7 +74,27 @@ def trajectory_calculation(
     return theta_i, t_sol
 
 
-def first_agent(obs: dict) -> list:
+def fleet_speed(ships: int, max_speed: float = MAX_SPEED) -> float:
+    return 1.0 + (max_speed - 1.0) * (np.log(ships) / np.log(1000)) ** 1.5
+
+
+def trajectory_crosses_sun(x1: float, y1: float, x2: float, y2: float) -> bool:
+    """Return True if the line segment (x1,y1)→(x2,y2) passes through the sun disk."""
+    dx, dy = x2 - x1, y2 - y1
+    fx, fy = x1 - SOLAR_X, y1 - SOLAR_Y
+    a = dx * dx + dy * dy
+    b = 2 * (fx * dx + fy * dy)
+    c = fx * fx + fy * fy - SOLAR_RADIUS**2
+    discriminant = b * b - 4 * a * c
+    if discriminant < 0:
+        return False
+    sqrt_disc = math.sqrt(discriminant)
+    t1 = (-b - sqrt_disc) / (2 * a)
+    t2 = (-b + sqrt_disc) / (2 * a)
+    return (0 <= t1 <= 1) or (0 <= t2 <= 1)
+
+
+def solar_afraid(obs: dict) -> list:
     print(f'--- NEW STEP: {obs.step} ---')
     moves = []
     player = obs.get('player', 0) if isinstance(obs, dict) else obs.player
@@ -91,14 +110,13 @@ def first_agent(obs: dict) -> list:
     ]
     comet_set = set(targets_comets)
     targets_all = [p for p in planets if p.owner != player and p not in comet_set]
-    # targets_opponent = [p for p in planets if p.owner not in {-1, player}]
-    # targets_neutral = [p for p in planets if p.owner == -1]
+    targets_opponent = [p for p in planets if p.owner not in {-1, player}]
+    targets_neutral = [p for p in planets if p.owner == -1]
     if not targets_all:
         return moves  # issue; assumes no danger from inflight fleets
 
     for sender in my_planets:
         # Find the nearest planet we don't own
-
         nearest = None
         min_dist = float('inf')
         for t in targets_all:
@@ -111,27 +129,30 @@ def first_agent(obs: dict) -> list:
             continue
 
         # How many ships do we need? Target's garrison + 1
-        # nearest = planets[12]  # TODO: Remove hardcoded target
         ships_needed = max(nearest.ships + 1, 15)
         # ships_needed = nearest.ships + 1
 
+        v = fleet_speed(ships_needed)  # speed of linear object
         # Only send if we have enough
         if sender.ships >= ships_needed:
             # Calculate angle from our planet to the target
-            # angle = math.atan2(nearest.y - sender.y, nearest.x - sender.x)
             angle, delta_t = trajectory_calculation(
                 sender,
                 nearest,
-                ships_needed,
+                # ships_needed,
+                v=v,
                 angular_speed=obs.angular_velocity,
                 # t_max=50.0,
             )
-            # if nearest.x**2 + nearest.y**2 < ORBIT_RADIUS**2:
-            # print('Target is MOVING')
-            # if obs.step == 36:
-            #     angle = 3.087482441904048  # hardcoded for testing
             if angle is None:
                 continue  # no valid trajectory
+            ix = sender.x + v * delta_t * math.cos(angle)
+            iy = sender.y + v * delta_t * math.sin(angle)
+            if trajectory_crosses_sun(sender.x, sender.y, ix, iy):
+                print(
+                    f'Player {player}: Trajectory from {sender.id} crosses the sun — send cancelled'
+                )
+                continue
             moves.append([sender.id, angle, ships_needed])
             print(f'Player {player}: Sending fleet from {sender.id} to {nearest.id}')
             print(f'  Ships: {ships_needed}, against target with {nearest.ships} ships')
@@ -139,15 +160,15 @@ def first_agent(obs: dict) -> list:
             print(
                 f'  Sender pos: ({sender.x:.2f}, {sender.y:.2f}), Target pos: ({nearest.x:.2f}, {nearest.y:.2f})',
             )
+            print(f'  Travel distance: {delta_t * v:.2f} ')
             print('---------------------------------')
 
     return moves
 
 
 if __name__ == '__main__':
-    # Test it against the random agent
     env = make('orbit_wars', debug=True)
-    env.run([first_agent, 'random', 'random', 'random'])
+    env.run([solar_afraid, first_agent])
 
     final = env.steps[-1]
     for i, s in enumerate(final):

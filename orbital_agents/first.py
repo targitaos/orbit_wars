@@ -20,58 +20,47 @@ def trajectory_calculation(
     target: Planet,
     ships_needed: int,
     angular_speed: float,
-    t_max: float = 100.0,
 ) -> tuple[float, float]:
 
     solar_x = SOLAR_X
     solar_y = SOLAR_Y
 
-    target_radius = target.radius  # physical radius of orbiting object
-    sender_radius = sender.radius  # physical radius of planet object
-
-    rp = math.sqrt((solar_x - target.x) ** 2 + (solar_y - target.y) ** 2)  # orbital radius
-    theta_p = math.atan2(target.y - solar_y, target.x - solar_x)  # initial angle of orbiting object
-
-    # rs = math.sqrt(
-    #     (sender.x - solar_x + sender_radius * np.cos(theta_p)) ** 2
-    #     + (sender.y - solar_y + sender_radius * np.sin(theta_p)) ** 2,
-    # )  # starting radius from sun for linear object
-    # theta_s = math.atan2(sender.y - solar_y, sender.x - solar_x)
+    target_radius = target.radius
+    rp = math.sqrt((solar_x - target.x) ** 2 + (solar_y - target.y) ** 2)
+    theta_p = math.atan2(target.y - solar_y, target.x - solar_x)
 
     dx, dy = sender.x - solar_x, sender.y - solar_y
     rs = math.hypot(dx, dy)
     theta_s = math.atan2(dy, dx)
 
     omega_p = angular_speed if rp + target_radius < ORBIT_RADIUS else 0
-    omega_s = angular_speed if rs + sender_radius < ORBIT_RADIUS else 0
 
     def fleet_speed(ships: int, max_speed: float = MAX_SPEED) -> float:
         return 1.0 + (max_speed - 1.0) * (np.log(ships) / np.log(1000)) ** 1.5
 
-    v = fleet_speed(ships_needed)  # speed of linear object
-    # fleet_startpos = np.array([sender.x, sender.y])  # starting position of linear object
+    v = fleet_speed(ships_needed)
+
+    # By the triangle inequality, (v*t)^2 > (rp+rs)^2 guarantees f(t) > 0,
+    # so the solution must lie within t < (rp+rs)/v.
+    t_max = (rp + rs) / v + 1.0
 
     def f(t):
         return (v * t) ** 2 - (
-            rp**2 + rs**2 - 2 * rp * rs * np.cos((omega_p) * t + theta_p - theta_s)
+            rp**2 + rs**2 - 2 * rp * rs * np.cos(omega_p * t + theta_p - theta_s)
         )
 
-    # Find a bracket where f changes sign
     t_grid = np.linspace(1e-6, t_max, 10_000)
     signs = np.sign(f(t_grid))
     idx = np.where(np.diff(signs))[0]
     if len(idx) == 0:
         print('No solution found for trajectory calculation')
-        return None, None  # no solution found
+        return None, None
 
-    # Take the first (earliest) intercept
     t_sol = brentq(f, t_grid[idx[0]], t_grid[idx[0] + 1])
 
-    # Recover theta_i from the original equations
     dx = rp * np.cos(omega_p * t_sol + theta_p) - rs * np.cos(theta_s)
     dy = rp * np.sin(omega_p * t_sol + theta_p) - rs * np.sin(theta_s)
     theta_i = np.arctan2(dy, dx)
-    # theta_i = 3.087482441904048 # hardcoded for testing
     return theta_i, t_sol
 
 

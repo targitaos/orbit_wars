@@ -29,7 +29,7 @@ Changed OvereageTime to 600s
 Economies of fleets; what proportion to send from planet
 Order of planets to command
 Weighting of target planets
-
+Simple weightings: Ships, production, dist, and owner.
 # Open questions:
 When do I go from Neutral Planets to Enemy Planets?
 Does planet speed impact velocity of fleet? Assumption asof 4/5: NO, asnwer 5/5: No
@@ -37,4 +37,4 @@ Can I see ships enroute? 6/5 YES
 
 # Agent ideas
 Zerg rush
-Networked support
+Networked support - empire/clique building

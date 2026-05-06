@@ -8,8 +8,14 @@ from kaggle_environments import make
 from kaggle_environments.envs.orbit_wars.orbit_wars import Fleet, Planet
 from scipy.optimize import brentq
 
-from orbital_agents.agent_methods import fleet_speed, trajectory_calculation, trajectory_crosses_sun
+from orbital_agents.agent_methods import (
+    TargetModule,
+    fleet_speed,
+    trajectory_calculation,
+    trajectory_crosses_sun,
+)
 from orbital_agents.first import first_agent
+from orbital_agents.solar_afraid import solar_afraid
 
 SOLAR_X = 50
 SOLAR_Y = 50
@@ -19,32 +25,19 @@ MAX_SPEED = 6.0
 COMET_MARKER = -99
 
 
-class TargetModule:
-    def __init__(self, player_id: int):
-        self.player_id = player_id
+# class TargetModule:
+#     def __init__(self, player_id: int):
+#         self.player_id = player_id
 
-    def nearest_target(self, sender: Planet, targets: list[Planet]) -> Planet | None:
-        target = None
-        min_dist = float('inf')
-        for t in targets:
-            dist = math.sqrt((sender.x - t.x) ** 2 + (sender.y - t.y) ** 2)
-            if dist < min_dist:
-                min_dist = dist
-                target = t
-        return target
-
-    # for sender in my_planets:
-    #     # Find the nearest planet we don't own
-    #     target = None
-    #     min_dist = float('inf')
-    #     for t in targets_all:
-    #         dist = math.sqrt((sender.x - t.x) ** 2 + (sender.y - t.y) ** 2)
-    #         if dist < min_dist:
-    #             min_dist = dist
-    #             target = t
-
-    #     if target is None:
-    #         continue
+#     def nearest_target(self, sender: Planet, targets: list[Planet]) -> Planet | None:
+#         target = None
+#         min_dist = float('inf')
+#         for t in targets:
+#             dist = math.sqrt((sender.x - t.x) ** 2 + (sender.y - t.y) ** 2)
+#             if dist < min_dist:
+#                 min_dist = dist
+#                 target = t
+#         return target
 
 
 def agent_target_weighting(obs: dict) -> list:
@@ -70,20 +63,10 @@ def agent_target_weighting(obs: dict) -> list:
 
     target_module = TargetModule(player)
     for sender in my_planets:
-        target = target_module.nearest_target(sender, targets_all)
+        # target = target_module.nearest_target(sender, targets_all)
+        target = target_module.simple_weighting_targeting(sender, targets_all)
         if target is None:
             continue
-        # # Find the nearest planet we don't own
-        # target = None
-        # min_dist = float('inf')
-        # for t in targets_all:
-        #     dist = math.sqrt((sender.x - t.x) ** 2 + (sender.y - t.y) ** 2)
-        #     if dist < min_dist:
-        #         min_dist = dist
-        #         target = t
-
-        # if target is None:
-        #     continue
 
         # How many ships do we need? Target's garrison + 1
         ships_needed = max(target.ships + 1, 15)
@@ -124,7 +107,7 @@ def agent_target_weighting(obs: dict) -> list:
 
 if __name__ == '__main__':
     env = make('orbit_wars', debug=True)
-    env.run([agent_target_weighting, first_agent])
+    env.run([agent_target_weighting, solar_afraid])
 
     final = env.steps[-1]
     for i, s in enumerate(final):

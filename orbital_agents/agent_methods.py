@@ -18,6 +18,42 @@ MAX_SPEED = 6.0
 COMET_MARKER = -99
 
 
+class TargetModule:
+    def __init__(self, player_id: int):
+        self.player_id = player_id
+
+    def nearest_target(self, sender: Planet, targets: list[Planet]) -> Planet | None:
+        """Prioritize closer targets and those with fewer ships."""
+        target = None
+        min_dist = float('inf')
+        for t in targets:
+            dist = math.sqrt((sender.x - t.x) ** 2 + (sender.y - t.y) ** 2)
+            if dist < min_dist:
+                min_dist = dist
+                target = t
+        return target
+
+    def simple_weighting_targeting(self, sender: Planet, targets: list[Planet]) -> float:
+        """Target planets with higher production and fewer ships, while also considering distance."""
+        target = None
+        max_weight = float('-inf')
+        for t in targets:
+            weight = self.simple_weighting(sender, t)
+            if weight > max_weight:
+                max_weight = weight
+                target = t
+        return target
+
+    def simple_weighting(self, sender: Planet, target: Planet) -> float:
+        """Calculate a simple weight for a target based on distance, and produciton and number of ships."""
+        dist_factor = math.sqrt((sender.x - target.x) ** 2 + (sender.y - target.y) ** 2) * 2
+        ship_factor = 1 / (1 + target.ships)  # more ships → lower weight
+        production_factor = 1 + target.production / 5  # more production → higher weight
+        return (
+            ship_factor * production_factor / dist_factor
+        )  # closer, higher production and fewer ships → higher weight
+
+
 def trajectory_calculation(
     sender: Planet,
     target: Planet,
@@ -35,12 +71,6 @@ def trajectory_calculation(
 
     rp = math.sqrt((solar_x - target.x) ** 2 + (solar_y - target.y) ** 2)  # orbital radius
     theta_p = math.atan2(target.y - solar_y, target.x - solar_x)  # initial angle of orbiting object
-
-    # rs = math.sqrt(
-    #     (sender.x - solar_x + sender_radius * np.cos(theta_p)) ** 2
-    #     + (sender.y - solar_y + sender_radius * np.sin(theta_p)) ** 2,
-    # )  # starting radius from sun for linear object
-    # theta_s = math.atan2(sender.y - solar_y, sender.x - solar_x)
 
     dx, dy = sender.x - solar_x, sender.y - solar_y
     rs = math.hypot(dx, dy)

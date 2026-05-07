@@ -8,7 +8,7 @@ from kaggle_environments import make
 from kaggle_environments.envs.orbit_wars.orbit_wars import Fleet, Planet
 from scipy.optimize import brentq
 
-from orbital_agents.first import first_agent
+from orbital_agents.v1_first import first_agent
 
 SOLAR_X = 50
 SOLAR_Y = 50
@@ -44,11 +44,15 @@ class TargetModule:
                 target = t
         return target
 
+    def top_n_targets(self, sender: Planet, targets: list[Planet], n: int) -> list[Planet]:
+        """Return the top n targets ranked by simple weighting."""
+        return sorted(targets, key=lambda t: self.simple_weighting(sender, t), reverse=True)[:n]
+
     def simple_weighting(self, sender: Planet, target: Planet) -> float:
         """Calculate a simple weight for a target based on distance, and produciton and number of ships."""
-        dist_factor = math.sqrt((sender.x - target.x) ** 2 + (sender.y - target.y) ** 2) * 2
+        dist_factor = math.sqrt((sender.x - target.x) ** 2 + (sender.y - target.y) ** 2) * 5
         ship_factor = 1 / (1 + target.ships)  # more ships → lower weight
-        production_factor = 1 + target.production / 5  # more production → higher weight
+        production_factor = 1 + target.production / 10  # more production → higher weight
         return (
             ship_factor * production_factor / dist_factor
         )  # closer, higher production and fewer ships → higher weight

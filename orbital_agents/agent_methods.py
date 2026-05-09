@@ -44,11 +44,39 @@ class TargetModule:
                 target = t
         return target
 
+    def threat_assessment(self, sender: Planet, all_planets: list[Planet]) -> float:
+        """Net threat score for `sender` from all other planets.
+
+        Enemy planets  → positive contribution  (ships / distance)
+        Own planets    → negative contribution  (support)
+        Neutral planets (owner == -1) → no contribution
+        Higher score = more threatened; negative = well supported.
+        """
+        threat = 0.0
+        for planet in all_planets:
+            if planet.id == sender.id:
+                continue
+            dist = max(math.sqrt((sender.x - planet.x) ** 2 + (sender.y - planet.y) ** 2), 1.0)
+            if planet.owner == self.player_id:
+                threat -= planet.ships / dist**2
+            elif planet.owner != -1:
+                threat += planet.ships / dist**2
+        return threat
+
     def top_n_targets(self, sender: Planet, targets: list[Planet], n: int) -> list[Planet]:
         """Return the top n targets ranked by simple weighting."""
         return sorted(targets, key=lambda t: self.simple_weighting(sender, t), reverse=True)[:n]
 
     def simple_weighting(self, sender: Planet, target: Planet) -> float:
+        """Calculate a simple weight for a target based on distance, and produciton and number of ships."""
+        dist_factor = math.sqrt((sender.x - target.x) ** 2 + (sender.y - target.y) ** 2) * 5
+        ship_factor = 1 / (1 + target.ships)  # more ships → lower weight
+        production_factor = 1 + target.production / 10  # more production → higher weight
+        return (
+            ship_factor * production_factor / dist_factor
+        )  # closer, higher production and fewer ships → higher weight
+
+    def simple_weighting_w_threats(self, sender: Planet, target: Planet) -> float:
         """Calculate a simple weight for a target based on distance, and produciton and number of ships."""
         dist_factor = math.sqrt((sender.x - target.x) ** 2 + (sender.y - target.y) ** 2) * 5
         ship_factor = 1 / (1 + target.ships)  # more ships → lower weight

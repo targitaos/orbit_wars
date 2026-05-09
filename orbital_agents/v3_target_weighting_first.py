@@ -41,7 +41,7 @@ COMET_MARKER = -99
 
 
 def agent_target_weighting(obs: dict) -> list:
-    print(f'--- NEW STEP: {obs.step} ---')
+    # print(f'--- NEW STEP: {obs.step} ---')
     moves = []
     player = obs.get('player', 0) if isinstance(obs, dict) else obs.player
     raw_planets = obs.get('planets', []) if isinstance(obs, dict) else obs.planets
@@ -88,19 +88,19 @@ def agent_target_weighting(obs: dict) -> list:
             ix = sender.x + v * delta_t * math.cos(angle)
             iy = sender.y + v * delta_t * math.sin(angle)
             if trajectory_crosses_sun(sender.x, sender.y, ix, iy):
-                print(
-                    f'Player {player}: Trajectory from {sender.id} crosses the sun — send cancelled'
-                )
+                # print(
+                #     f'Player {player}: Trajectory from {sender.id} crosses the sun — send cancelled'
+                # )
                 continue
             moves.append([sender.id, angle, ships_needed])
-            print(f'Player {player}: Sending fleet from {sender.id} to {target.id}')
-            print(f'  Ships: {ships_needed}, against target with {target.ships} ships')
-            print(f'  Angle: {(angle / np.pi):.2f}π, ETA: {delta_t:.2f} steps')
-            print(
-                f'  Sender pos: ({sender.x:.2f}, {sender.y:.2f}), Target pos: ({target.x:.2f}, {target.y:.2f})',
-            )
-            print(f'  Travel distance: {delta_t * v:.2f} ')
-            print('---------------------------------')
+            # print(f'Player {player}: Sending fleet from {sender.id} to {target.id}')
+            # print(f'  Ships: {ships_needed}, against target with {target.ships} ships')
+            # print(f'  Angle: {(angle / np.pi):.2f}π, ETA: {delta_t:.2f} steps')
+            # print(
+            #     f'  Sender pos: ({sender.x:.2f}, {sender.y:.2f}), Target pos: ({target.x:.2f}, {target.y:.2f})',
+            # )
+            # print(f'  Travel distance: {delta_t * v:.2f} ')
+            # print('---------------------------------')
 
     return moves
 

@@ -11,6 +11,10 @@ dependencies = [
     "kagglehub>=1.0.1",
     "kaggle-environments>=1.28.0",
     "ipython>=9.13.0",
+    "gymnasium>=1.2.0",
+    "stable-baselines3>=2.8.0",
+    "torch>=2.11.0",
+    "tensorboard>=2.20.0",
 ]
 
 [tool.ruff]

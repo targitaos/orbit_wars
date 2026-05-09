@@ -16,24 +16,25 @@ Changed OvereageTime to 600s
 
 
 # Implement
-* DONE: Deterministic trajectories, never miss.
-* DONE: Features: Avoid sun; center at (50,50), radius 10. If trajectory intersects sun, adjust angle to be tangent to sun.
-* Implement Fleet ledger.
-* Weigh planet by distance AND ship strengh
-* Multiple attack vectors from a single planet
+* Threat + Support : Send lower/higher proportion of fleet
+** DONE: Deterministic trajectories, never miss.
+** DONE: Implement Fleet ledger.
+** DONE: Features: Avoid sun; center at (50,50), radius 10. If trajectory intersects sun, adjust angle to be     tangent to sun.
+** DONE: Multiple attack vectors from a single planet
+** DONE: Weigh planet by distance AND ship strengh
 
 # Implement later
 * If no attack vector, send reinforcements
 * Measure incident fleets - enemy and friendly
 * Weighting made dependent on my planet fleet size
 * In main.py implement generall "def agent" method + specific agent class.
-* Threat + Support : Send lower/higher proportion of fleet
 
 # Learnable:
 Economies of fleets; what proportion to send from planet
 Order of planets to command
 Weighting of target planets
 Simple weightings: Ships, production, dist, and owner.
+Threat, opportunity, support
 
 # Open questions:
 When do I go from Neutral Planets to Enemy Planets?

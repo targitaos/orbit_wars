@@ -29,19 +29,22 @@ from stable_baselines3.common.monitor import Monitor
 from orbital_agents.v3_target_weighting_first import agent_target_weighting
 from rl.rl_env import OrbitWarsEnv
 
-MODELS_DIR = Path('rl/models')
-LOGS_DIR = Path('rl/logs')
+# MODELS_DIR = Path('rl/models')
+# LOGS_DIR = Path('rl/logs')
 
+MODELS_DIR = Path('kaggle/working/models')
+LOGS_DIR = Path('kaggle/working/logs')
+
+
+# torch.save(model.state_dict(), "/kaggle/working/model.pt")
 # How many total game steps to train for.
 # Each orbit_wars episode is 30 steps, so this is roughly 3000 episodes.
 # Expect the first ~500 episodes to look completely random — that's normal.
-TOTAL_TIMESTEPS = 90_000
-# TOTAL_TIMESTEPS = 1_000
+TOTAL_TIMESTEPS = 10_000
 
 
 def make_env() -> Monitor:
-    """
-    Create one environment instance wrapped in Monitor.
+    """Create one environment instance wrapped in Monitor.
 
     Monitor is a thin wrapper that records how much reward was earned each
     episode and how long it lasted. stable-baselines3 reads those logs to

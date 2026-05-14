@@ -41,6 +41,19 @@ LOGS_DIR = Path('kaggle/working/logs')
 # Each orbit_wars episode is 30 steps, so this is roughly 3000 episodes.
 # Expect the first ~500 episodes to look completely random — that's normal.
 TOTAL_TIMESTEPS = 10_000
+import argparse
+
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='Train a PPO agent for Orbit Wars.')
+    parser.add_argument(
+        '--timesteps',
+        type=int,
+        default=10_000,
+        help='Total number of training timesteps (default: 10_000)',
+    )
+    args = parser.parse_args()
+    return args
 
 
 def make_env() -> Monitor:
@@ -55,6 +68,8 @@ def make_env() -> Monitor:
 
 
 def main() -> None:
+    args = parse_arguments()
+
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -136,7 +151,7 @@ def main() -> None:
     print('Watch progress: tensorboard --logdir rl/logs\n')
 
     model.learn(
-        total_timesteps=TOTAL_TIMESTEPS,
+        total_timesteps=args.timesteps,
         callback=eval_callback,
         tb_log_name='ppo_v1',
         progress_bar=True,

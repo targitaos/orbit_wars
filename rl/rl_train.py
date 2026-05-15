@@ -18,6 +18,7 @@ We never hand-code strategy here. The policy learns on its own which weight
 combination wins most often against the opponent.
 """
 
+import argparse
 from pathlib import Path
 
 from stable_baselines3 import PPO
@@ -29,19 +30,10 @@ from stable_baselines3.common.monitor import Monitor
 from orbital_agents.v3_target_weighting_first import agent_target_weighting
 from rl.rl_env import OrbitWarsEnv
 
-# MODELS_DIR = Path('rl/models')
-# LOGS_DIR = Path('rl/logs')
-
-MODELS_DIR = Path('kaggle/working/models')
-LOGS_DIR = Path('kaggle/working/logs')
-
-
 # torch.save(model.state_dict(), "/kaggle/working/model.pt")
 # How many total game steps to train for.
 # Each orbit_wars episode is 30 steps, so this is roughly 3000 episodes.
 # Expect the first ~500 episodes to look completely random — that's normal.
-TOTAL_TIMESTEPS = 10_000
-import argparse
 
 
 def parse_arguments():
@@ -52,8 +44,19 @@ def parse_arguments():
         default=10_000,
         help='Total number of training timesteps (default: 10_000)',
     )
-    args = parser.parse_args()
-    return args
+    parser.add_argument(
+        '--models_dir',
+        type=Path,
+        default=Path('rl/models'),
+        help='Directory to save trained models (default: rl/models)',
+    )
+    parser.add_argument(
+        '--logs_dir',
+        type=Path,
+        default=Path('rl/logs'),
+        help='Directory to save training logs (default: rl/logs)',
+    )
+    return parser.parse_args()
 
 
 def make_env() -> Monitor:
@@ -70,8 +73,8 @@ def make_env() -> Monitor:
 def main() -> None:
     args = parse_arguments()
 
-    MODELS_DIR.mkdir(parents=True, exist_ok=True)
-    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    (args.models_dir).mkdir(parents=True, exist_ok=True)
+    (args.logs_dir).mkdir(parents=True, exist_ok=True)
 
     # ------------------------------------------------------------------
     # Step 1: Sanity-check the environment
@@ -95,8 +98,8 @@ def main() -> None:
     # This is how you track whether training is actually making progress.
     eval_callback = EvalCallback(
         eval_env,
-        best_model_save_path=str(MODELS_DIR / 'best'),
-        log_path=str(LOGS_DIR / 'eval'),
+        best_model_save_path=str(args.models_dir / 'best'),
+        log_path=str(args.logs_dir / 'eval'),
         eval_freq=3_000,  # evaluate every 3000 steps = ~100 episodes
         n_eval_episodes=30,  # average over 30 episodes to reduce variance
         deterministic=True,  # use the greedy action (no random sampling) when evaluating
@@ -110,7 +113,7 @@ def main() -> None:
     # continuous action spaces. The "proximal" part means each gradient update
     # is clipped so the policy can't change too drastically in one step —
     # this makes training much more stable than older methods.
-    #
+    # TODO: Find if n_steps "overshoots" the episode, start with new episode every time.
     # MlpPolicy = a small feed-forward neural net (two hidden layers of 64
     # neurons by default). The net takes the observation vector as input
     # and outputs the 4 action weights.
@@ -118,7 +121,6 @@ def main() -> None:
         policy='MlpPolicy',
         env=train_env,
         # n_steps: steps collected before each gradient update.
-        # 30 steps/episode * 10 = 300, so each update uses ~10 full episodes.
         n_steps=300,
         # batch_size: PPO splits n_steps into mini-batches. Must divide n_steps.
         batch_size=60,
@@ -133,10 +135,10 @@ def main() -> None:
         # Without this, the policy collapses to one action too early, before
         # it has explored enough of the action space.
         ent_coef=0.01,
-        tensorboard_log=str(LOGS_DIR),
-        verbose=1,
+        tensorboard_log=str(args.logs_dir),
+        verbose=0,
     )
-
+    print(f'Model device: {model.device}')
     # ------------------------------------------------------------------
     # Step 4: Train
     # ------------------------------------------------------------------
@@ -157,7 +159,7 @@ def main() -> None:
         progress_bar=True,
     )
 
-    final_path = str(MODELS_DIR / 'ppo_v1_final')
+    final_path = str(args.models_dir / 'ppo_v1_final')
     model.save(final_path)
     print(f'\nFinal model saved to {final_path}.zip')
 
@@ -172,7 +174,7 @@ def main() -> None:
     mean_reward, std_reward = evaluate_policy(
         model,
         eval_env,
-        n_eval_episodes=50,
+        n_eval_episodes=1_000,
         deterministic=True,
     )
     print(f'Mean reward: {mean_reward:.3f} ± {std_reward:.3f}')
@@ -180,4 +182,5 @@ def main() -> None:
 
 
 if __name__ == '__main__':
+    Path('rl/models')
     main()

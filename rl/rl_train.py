@@ -19,6 +19,7 @@ combination wins most often against the opponent.
 """
 
 import argparse
+import time
 from pathlib import Path
 
 from stable_baselines3 import PPO
@@ -32,17 +33,54 @@ from rl.rl_env import OrbitWarsEnv
 
 # torch.save(model.state_dict(), "/kaggle/working/model.pt")
 # How many total game steps to train for.
-# Each orbit_wars episode is 30 steps, so this is roughly 3000 episodes.
+# Each orbit_wars episode is 500 steps, so this is roughly 3000 episodes.
 # Expect the first ~500 episodes to look completely random — that's normal.
 
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Train a PPO agent for Orbit Wars.')
+
     parser.add_argument(
         '--timesteps',
         type=int,
+        default=100_000,
+        help='Total number of training timesteps (default: 100_000)',
+    )
+    parser.add_argument(
+        '--episode_steps',
+        type=int,
+        default=500,
+        help='Number of steps per episode (default: 500). This means by default we train for 200 episodes (100_000 / 500).',
+    )
+    parser.add_argument(
+        '--eval_freq',
+        type=int,
         default=10_000,
-        help='Total number of training timesteps (default: 10_000)',
+        help='Evaluate every N training steps (default: 10000)',
+    )
+    parser.add_argument(
+        '--n_eval_episodes',
+        type=int,
+        default=50,
+        help='Number of episodes to average over during evaluation (default: 50)',
+    )
+    parser.add_argument(
+        '--n_eval_episodes_final',
+        type=int,
+        default=200,
+        help='Number of episodes to average over during final evaluation (default: 1000)',
+    )
+    parser.add_argument(
+        '--n_steps',
+        type=int,
+        default=500,
+        help='Number of steps to collect before each PPO update (default: 500)',
+    )
+    parser.add_argument(
+        '--batch_size',
+        type=int,
+        default=50,
+        help='Batch size for PPO updates (default: 50)',
     )
     parser.add_argument(
         '--models_dir',
@@ -66,11 +104,13 @@ def make_env() -> Monitor:
     episode and how long it lasted. stable-baselines3 reads those logs to
     print progress updates (ep_rew_mean, ep_len_mean).
     """
-    env = OrbitWarsEnv(opponent_agent=agent_target_weighting, episode_steps=30)
+    args = parse_arguments()
+    env = OrbitWarsEnv(opponent_agent=agent_target_weighting, episode_steps=args.episode_steps)
     return Monitor(env)
 
 
 def main() -> None:
+    start_time = time.time()
     args = parse_arguments()
 
     (args.models_dir).mkdir(parents=True, exist_ok=True)
@@ -100,8 +140,8 @@ def main() -> None:
         eval_env,
         best_model_save_path=str(args.models_dir / 'best'),
         log_path=str(args.logs_dir / 'eval'),
-        eval_freq=3_000,  # evaluate every 3000 steps = ~100 episodes
-        n_eval_episodes=30,  # average over 30 episodes to reduce variance
+        eval_freq=args.eval_freq,  # evaluate every N steps
+        n_eval_episodes=args.n_eval_episodes,  # average over N episodes to reduce variance
         deterministic=True,  # use the greedy action (no random sampling) when evaluating
         verbose=1,
     )
@@ -117,13 +157,20 @@ def main() -> None:
     # MlpPolicy = a small feed-forward neural net (two hidden layers of 64
     # neurons by default). The net takes the observation vector as input
     # and outputs the 4 action weights.
+    import torch
+
+    policy_kwargs = {
+        # 'activation_fn': torch.nn.ReLU,
+        'net_arch': {'pi': [128, 128], 'vf': [128, 128]},
+    }
+
     model = PPO(
         policy='MlpPolicy',
         env=train_env,
         # n_steps: steps collected before each gradient update.
-        n_steps=300,
+        n_steps=500,
         # batch_size: PPO splits n_steps into mini-batches. Must divide n_steps.
-        batch_size=60,
+        batch_size=args.batch_size,
         # n_epochs: how many gradient steps to take on each collected batch.
         # More epochs = more learning per episode, but risks overfit to that batch.
         n_epochs=5,
@@ -137,6 +184,7 @@ def main() -> None:
         ent_coef=0.01,
         tensorboard_log=str(args.logs_dir),
         verbose=0,
+        policy_kwargs=policy_kwargs,
     )
     print(f'Model device: {model.device}')
     # ------------------------------------------------------------------
@@ -155,11 +203,11 @@ def main() -> None:
     model.learn(
         total_timesteps=args.timesteps,
         callback=eval_callback,
-        tb_log_name='ppo_v1',
+        tb_log_name='ppo_v2',
         progress_bar=True,
     )
 
-    final_path = str(args.models_dir / 'ppo_v1_final')
+    final_path = str(args.models_dir / 'ppo_2x128')
     model.save(final_path)
     print(f'\nFinal model saved to {final_path}.zip')
 
@@ -174,13 +222,17 @@ def main() -> None:
     mean_reward, std_reward = evaluate_policy(
         model,
         eval_env,
-        n_eval_episodes=1_000,
+        n_eval_episodes=args.n_eval_episodes_final,
         deterministic=True,
     )
     print(f'Mean reward: {mean_reward:.3f} ± {std_reward:.3f}')
     print('(>0 = winning more than losing, <0 = losing more than winning)')
+    end_time = time.time()
+    print(f'Total training time: {(end_time - start_time) / 60:.2f} min')
 
 
 if __name__ == '__main__':
-    Path('rl/models')
     main()
+    # python -m rl.rl_train --timesteps 1_200
+    # uv run tensorboard --logdir rl/logs
+    # uv run python -m rl.rl_train --timesteps 10_000

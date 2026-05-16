@@ -98,6 +98,7 @@ class OrbitWarsEnv(gym.Env):
 
     def _compute_moves(self, obs, w_dist, w_ships, w_prod, send_ratio) -> list:
         step = obs.step
+        player = obs.player if hasattr(obs, 'player') else self._player
 
         if step == 0:
             self._fleet_ledger.clear()
@@ -107,14 +108,14 @@ class OrbitWarsEnv(gym.Env):
                 del self._fleet_ledger[k]
 
         planets = [Planet(*p) for p in obs.planets]
-        my_planets = [p for p in planets if p.owner == self._player]
+        my_planets = [p for p in planets if p.owner == player]
 
         comet_ids = {
             planets[i].id
             for i, ip in enumerate(obs.initial_planets)
             if ip[2] == COMET_MARKER and ip[3] == COMET_MARKER
         }
-        targets = [p for p in planets if p.owner != self._player and p.id not in comet_ids]
+        targets = [p for p in planets if p.owner != player and p.id not in comet_ids]
         if not targets:
             return []
 
@@ -161,7 +162,7 @@ class OrbitWarsEnv(gym.Env):
 
     def _extract_obs(self, obs) -> np.ndarray:
         planets = [Planet(*p) for p in obs.planets]
-        player = self._player
+        player = obs.player if hasattr(obs, 'player') else self._player
 
         my_ships = sum(p.ships for p in planets if p.owner == player)
         enemy_ships = sum(p.ships for p in planets if p.owner not in {-1, player})

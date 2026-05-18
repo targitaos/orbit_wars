@@ -45,10 +45,12 @@ def parse_arguments():
 
     parser.add_argument(
         '--architecture',
-        type=list[int] | None,
+        type=int,
+        nargs='+',
         default=None,
-        help='Architecture of the neural network (default: None, which uses stable-baselines3 defaults of [64, 64])',
+        help='Architecture of the neural network as a list of layer sizes, e.g. --architecture 64 64 (default: None, which uses stable-baselines3 defaults of [64, 64])',
     )
+
     parser.add_argument(
         '--timesteps',
         type=int,
@@ -77,7 +79,7 @@ def parse_arguments():
         '--n_eval_episodes_final',
         type=int,
         default=200,
-        help='Number of episodes to average over during final evaluation (default: 1000)',
+        help='Number of episodes to average over during final evaluation (default: 200)',
     )
     parser.add_argument(
         '--n_steps',
@@ -173,6 +175,8 @@ def main() -> None:
             # 'activation_fn': torch.nn.ReLU,
             'net_arch': {'pi': args.architecture, 'vf': args.architecture},
         }
+    else:
+        policy_kwargs = None
 
     model = PPO(
         policy='MlpPolicy',

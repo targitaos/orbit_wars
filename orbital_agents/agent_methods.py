@@ -119,7 +119,7 @@ def trajectory_calculation(
     signs = np.sign(f(t_grid))
     idx = np.where(np.diff(signs))[0]
     if len(idx) == 0:
-        print('No solution found for trajectory calculation')
+        # print('No solution found for trajectory calculation')
         return None, None
 
     t_sol = brentq(f, t_grid[idx[0]], t_grid[idx[0] + 1])

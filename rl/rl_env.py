@@ -18,17 +18,19 @@ OBS_SIZE = _GLOBAL_FEATURES + MAX_PLANETS * _PLANET_FEATURES
 
 # Action indices
 W_DIST = 0
-W_SHIPS = 1
-W_PRODUCTION = 2
-SEND_RATIO = 3
+W_ALLEGIANCE = 1
+W_SHIPS = 2
+W_PRODUCTION = 3
+SEND_RATIO = 4
 
 
 class OrbitWarsEnv(gym.Env):
     """Gym wrapper around the kaggle orbit_wars environment.
 
-    Action space (Box, 4 dims):
-        [w_dist, w_ships, w_production, send_ratio]
+    Action space (Box, 5 dims):
+        [w_dist, w_allegiance, w_ships, w_production, send_ratio]
         - w_dist: how much to prefer closer targets (higher = prefer near)
+        - w_allegiance: how much to prefer enemy-owned targets vs neutral
         - w_ships: how much to prefer lightly defended targets (higher = prefer weak)
         - w_production: how much to prefer high-production targets (higher = prefer rich)
         - send_ratio: fraction of a planet's ships to commit per attack (0.1-0.9)
@@ -49,8 +51,8 @@ class OrbitWarsEnv(gym.Env):
         self._current_obs = None
 
         self.action_space = gym.spaces.Box(
-            low=np.array([0.1, 0.1, 0.1, 0.1], dtype=np.float32),
-            high=np.array([5.0, 5.0, 5.0, 0.9], dtype=np.float32),
+            low=np.array([0.1, 0.1, 0.1, 0.1, 0.1], dtype=np.float32),
+            high=np.array([5.0, 5.0, 5.0, 5.0, 0.9], dtype=np.float32),
         )  # fmt: skip
         self.observation_space = gym.spaces.Box(
             low=0.0,
@@ -76,9 +78,11 @@ class OrbitWarsEnv(gym.Env):
         return self._extract_obs(self._current_obs), {}
 
     def step(self, action: np.ndarray):
-        w_dist, w_ships, w_prod, send_ratio = action.tolist()
+        w_dist, w_allegiance, w_ships, w_prod, send_ratio = action.tolist()
 
-        p0_moves = self._compute_moves(self._current_obs, w_dist, w_ships, w_prod, send_ratio)
+        p0_moves = self._compute_moves(
+            self._current_obs, w_dist, w_allegiance, w_ships, w_prod, send_ratio
+        )
 
         opp_obs = self._kaggle_env.state[1].observation
         opp_obs.step = self._current_obs.step  # kaggle only injects step into player 0's obs
@@ -96,7 +100,7 @@ class OrbitWarsEnv(gym.Env):
     # Agent logic (parameterised heuristic)
     # ------------------------------------------------------------------
 
-    def _compute_moves(self, obs, w_dist, w_ships, w_prod, send_ratio) -> list:
+    def _compute_moves(self, obs, w_dist, w_allegiance, w_ships, w_prod, send_ratio) -> list:
         step = obs.step
         player = obs.player if hasattr(obs, 'player') else self._player
 
@@ -119,42 +123,82 @@ class OrbitWarsEnv(gym.Env):
         if not targets:
             return []
 
+        # Ships needed to capture a target (neutral: just outnumber; enemy: min 15).
+        def required(t: Planet) -> int:
+            return t.ships + 1 if t.owner == -1 else max(t.ships + 1, 15)
+
+        committed: dict[int, int] = {}  # target id -> ships allocated by this turn's fleets
+
         moves = []
         for sender in my_planets:
-            best = max(targets, key=lambda t: self._score(sender, t, w_dist, w_ships, w_prod))
+            # Prefer targets this turn's other fleets haven't already covered, so
+            # planets spread out. A target stays selectable while still
+            # under-committed, which keeps deliberate combined attacks possible.
+            available = [t for t in targets if committed.get(t.id, 0) < required(t)]
+            if not available:
+                available = targets
+
+            best = max(
+                available,
+                key=lambda t: self._score(sender, t, w_dist, w_allegiance, w_ships, w_prod),
+            )
 
             if step < self._fleet_ledger.get((sender.id, best.id), 0):
                 continue
 
-            needed = best.ships + 1 if best.owner == -1 else max(best.ships + 1, 15)
+            needed = max(0, required(best) - committed.get(best.id, 0))
             ships = max(needed, int(sender.ships * send_ratio))
 
             if sender.ships < ships:
                 continue
 
-            v = fleet_speed(ships)
-            angle, delta_t = trajectory_calculation(
-                sender, best, v=v, angular_speed=obs.angular_velocity
-            )
-            if angle is None:
+            resolved = self._resolve_launch(sender, best, ships, obs.angular_velocity)
+            if resolved is None:
                 continue
-
-            ix = sender.x + v * delta_t * math.cos(angle)
-            iy = sender.y + v * delta_t * math.sin(angle)
-            if trajectory_crosses_sun(sender.x, sender.y, ix, iy):
-                continue
+            angle, delta_t = resolved
 
             self._fleet_ledger[(sender.id, best.id)] = step + math.ceil(delta_t)
+            committed[best.id] = committed.get(best.id, 0) + ships
             moves.append([sender.id, angle, ships])
 
         return moves
 
-    def _score(self, sender: Planet, target: Planet, w_dist, w_ships, w_prod) -> float:
+    def _resolve_launch(
+        self,
+        sender: Planet,
+        target: Planet,
+        ships: int,
+        angular_velocity: float,
+    ) -> tuple[float, float] | None:
+        """Return (angle, delta_t) for a valid fleet, or None if it can't be launched."""
+        v = fleet_speed(ships)
+        angle, delta_t = trajectory_calculation(
+            sender,
+            target,
+            v=v,
+            angular_speed=angular_velocity,
+        )
+        if angle is None:
+            return None
+
+        ix = sender.x + v * delta_t * math.cos(angle)
+        iy = sender.y + v * delta_t * math.sin(angle)
+        if trajectory_crosses_sun(sender.x, sender.y, ix, iy):
+            return None
+
+        return angle, delta_t
+
+    def _score(
+        self, sender: Planet, target: Planet, w_dist, w_allegiance, w_ships, w_prod
+    ) -> float:
         dist = math.hypot(sender.x - target.x, sender.y - target.y)
         dist_factor = 1.0 / (1.0 + dist * w_dist * 0.1)
+        # Neutral targets are the baseline; w_allegiance scales how much
+        # enemy-owned targets are preferred (>1) or avoided (<1) relative to them.
+        allegiance_factor = 1.0 if target.owner == -1 else w_allegiance
         ship_factor = 1.0 / (1.0 + target.ships * w_ships * 0.01)
         prod_factor = 1.0 + target.production * w_prod * 0.1
-        return dist_factor * ship_factor * prod_factor
+        return dist_factor * ship_factor * prod_factor * allegiance_factor
 
     # ------------------------------------------------------------------
     # Observation & reward

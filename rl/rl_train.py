@@ -20,6 +20,8 @@ combination wins most often against the opponent.
 
 import argparse
 import time
+
+# from html import parser
 from pathlib import Path
 
 from stable_baselines3 import PPO
@@ -38,8 +40,15 @@ from rl.rl_env import OrbitWarsEnv
 
 
 def parse_arguments():
+
     parser = argparse.ArgumentParser(description='Train a PPO agent for Orbit Wars.')
 
+    parser.add_argument(
+        '--architecture',
+        type=list[int] | None,
+        default=None,
+        help='Architecture of the neural network (default: None, which uses stable-baselines3 defaults of [64, 64])',
+    )
     parser.add_argument(
         '--timesteps',
         type=int,
@@ -159,10 +168,11 @@ def main() -> None:
     # and outputs the 4 action weights.
     import torch
 
-    policy_kwargs = {
-        # 'activation_fn': torch.nn.ReLU,
-        'net_arch': {'pi': [128, 128], 'vf': [128, 128]},
-    }
+    if args.architecture is not None:
+        policy_kwargs = {
+            # 'activation_fn': torch.nn.ReLU,
+            'net_arch': {'pi': args.architecture, 'vf': args.architecture},
+        }
 
     model = PPO(
         policy='MlpPolicy',
@@ -206,8 +216,10 @@ def main() -> None:
         tb_log_name='ppo_v2',
         progress_bar=True,
     )
-
-    final_path = str(args.models_dir / 'ppo_2x128')
+    final_filename = (
+        f'ppo_{"x".join(map(str, args.architecture))}' if args.architecture else 'ppo_default'
+    )
+    final_path = str(args.models_dir / final_filename)
     model.save(final_path)
     print(f'\nFinal model saved to {final_path}.zip')
 

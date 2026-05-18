@@ -44,6 +44,12 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description='Train a PPO agent for Orbit Wars.')
 
     parser.add_argument(
+        '--opponent',
+        type=str,
+        default='agent_target_weighting',
+        help='Opponent agent to train against (default: agent_target_weighting)',
+    )
+    parser.add_argument(
         '--architecture',
         type=int,
         nargs='+',

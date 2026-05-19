@@ -20,6 +20,7 @@ combination wins most often against the opponent.
 
 import argparse
 import time
+from collections.abc import Callable
 
 # from html import parser
 from pathlib import Path
@@ -114,15 +115,31 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def make_env() -> Monitor:
+def make_rl_agent(model_path: str) -> Callable:
+    """Return an rl_agent callable backed by a saved PPO model.
+
+    Each call creates its own OrbitWarsEnv helper so the internal
+    _fleet_ledger state is not shared between train and eval environments.
+    """
+    model = PPO.load(model_path)
+    helper = OrbitWarsEnv()
+
+    def rl_agent(obs):
+        gym_obs = helper._extract_obs(obs)
+        action, _ = model.predict(gym_obs, deterministic=True)
+        return helper._compute_moves(obs, *action)
+
+    return rl_agent
+
+
+def make_env(opponent_agent: Callable | list[Callable], episode_steps: int) -> Monitor:
     """Create one environment instance wrapped in Monitor.
 
     Monitor is a thin wrapper that records how much reward was earned each
     episode and how long it lasted. stable-baselines3 reads those logs to
     print progress updates (ep_rew_mean, ep_len_mean).
     """
-    args = parse_arguments()
-    env = OrbitWarsEnv(opponent_agent=agent_target_weighting, episode_steps=args.episode_steps)
+    env = OrbitWarsEnv(opponent_agent=opponent_agent, episode_steps=episode_steps)
     return Monitor(env)
 
 
@@ -143,8 +160,18 @@ def main() -> None:
     check_env(OrbitWarsEnv(opponent_agent=agent_target_weighting), warn=True)
     print('Environment OK.\n')
 
-    train_env = make_env()
-    eval_env = make_env()
+    opponent_pool_training = [
+        make_rl_agent('rl/models/ppo_64x64x64_mark2'),
+        make_rl_agent('rl/models/ppo_64x64x64_mark2'),
+        make_rl_agent('rl/models/ppo_64x64x64_mark2'),
+    ]
+    opponent_pool_eval = [
+        make_rl_agent('rl/models/ppo_64x64x64_mark2'),
+        make_rl_agent('rl/models/ppo_64x64x64_mark2'),
+        make_rl_agent('rl/models/ppo_64x64x64_mark2'),
+    ]
+    train_env = make_env(opponent_pool_training, args.episode_steps)
+    eval_env = make_env(opponent_pool_eval, args.episode_steps)
 
     # ------------------------------------------------------------------
     # Step 2: Set up evaluation callback
@@ -170,11 +197,9 @@ def main() -> None:
     # continuous action spaces. The "proximal" part means each gradient update
     # is clipped so the policy can't change too drastically in one step —
     # this makes training much more stable than older methods.
-    # TODO: Find if n_steps "overshoots" the episode, start with new episode every time.
     # MlpPolicy = a small feed-forward neural net (two hidden layers of 64
     # neurons by default). The net takes the observation vector as input
     # and outputs the 4 action weights.
-    import torch
 
     if args.architecture is not None:
         policy_kwargs = {

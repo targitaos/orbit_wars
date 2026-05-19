@@ -44,7 +44,14 @@ class OrbitWarsEnv(gym.Env):
     def __init__(self, opponent_agent=None, episode_steps: int = 30):
         super().__init__()
         self.episode_steps = episode_steps
-        self.opponent_agent = opponent_agent  # callable(obs) -> moves, or None for no-op
+        # Normalise to a list so reset() can always sample uniformly.
+        if opponent_agent is None:
+            self._opponent_pool = []
+        elif callable(opponent_agent):
+            self._opponent_pool = [opponent_agent]
+        else:
+            self._opponent_pool = list(opponent_agent)
+        self._active_opponent = self._opponent_pool[0] if self._opponent_pool else None
         self._fleet_ledger: dict[tuple[int, int], int] = {}
         self._player = 0
         self._kaggle_env = None
@@ -67,6 +74,8 @@ class OrbitWarsEnv(gym.Env):
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
+        if self._opponent_pool:
+            self._active_opponent = self.np_random.choice(self._opponent_pool)
         self._fleet_ledger.clear()
         self._kaggle_env = make(
             'orbit_wars',
@@ -86,7 +95,7 @@ class OrbitWarsEnv(gym.Env):
 
         opp_obs = self._kaggle_env.state[1].observation
         opp_obs.step = self._current_obs.step  # kaggle only injects step into player 0's obs
-        p1_moves = self.opponent_agent(opp_obs) if self.opponent_agent is not None else []
+        p1_moves = self._active_opponent(opp_obs) if self._active_opponent is not None else []
 
         self._kaggle_env.step([p0_moves, p1_moves])
         self._current_obs = self._kaggle_env.state[self._player].observation

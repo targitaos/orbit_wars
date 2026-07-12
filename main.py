@@ -1,9 +1,12 @@
+import inspect
 import math
+from pathlib import Path
 
 import numpy as np
+import torch
 from kaggle_environments.envs.orbit_wars.orbit_wars import Planet
 from scipy.optimize import brentq
-from stable_baselines3 import PPO
+from torch import nn
 
 SOLAR_X = 50
 SOLAR_Y = 50
@@ -14,6 +17,9 @@ COMET_MARKER = -99
 
 MAX_PLANETS = 30
 _PLANET_FEATURES = 7  # [is_mine, is_enemy, ships, production, x, y, dist_from_sun]
+
+_ACTION_LOW = np.array([0.1, 0.1, 0.1, 0.1, 0.1], dtype=np.float32)
+_ACTION_HIGH = np.array([5.0, 5.0, 5.0, 5.0, 0.9], dtype=np.float32)
 
 
 def trajectory_calculation(
@@ -203,11 +209,42 @@ class AgentHelper:
         return np.concatenate([global_feat, planet_feat])
 
 
-model = PPO.load('rl/models/best_model')
+class ModelModule(nn.Module):
+    def __init__(self):
+        super().__init__()
+        obs_size = 6 + MAX_PLANETS * _PLANET_FEATURES
+        self.policy_net = nn.Sequential(
+            nn.Linear(obs_size, 128),
+            nn.Tanh(),
+            nn.Linear(128, 128),
+            nn.Tanh(),
+            nn.Linear(128, 64),
+            nn.Tanh(),
+            nn.Linear(64, 64),
+            nn.Tanh(),
+        )
+        self.action_net = nn.Linear(64, 5)
+
+    def forward(self, x):
+        return self.action_net(self.policy_net(x))
+
+    def predict(self, obs: np.ndarray) -> np.ndarray:
+        with torch.no_grad():
+            x = torch.as_tensor(obs, dtype=torch.float32).unsqueeze(0)
+            action = self(x).squeeze(0).numpy()
+        return np.clip(action, _ACTION_LOW, _ACTION_HIGH)
+
+
 helper = AgentHelper()
+model = ModelModule()
+_weights_path = (
+    Path(inspect.getfile(inspect.currentframe())).parent / 'rl' / 'models' / 'policy_weights_v2.pt'
+)
+model.load_state_dict(torch.load(_weights_path, map_location='cpu'))
+model.eval()
 
 
 def agent(obs):
     gym_obs = helper._extract_obs(obs)
-    action, _ = model.predict(gym_obs, deterministic=True)
+    action = model.predict(gym_obs)
     return helper._compute_moves(obs, *action)
